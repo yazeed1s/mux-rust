@@ -1,126 +1,66 @@
-use reqwest::Method;
-use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use mux_rust::{live_stream::CreateLiveStreamRequest, MuxClient};
 
-struct BasicAuth {
-    token_id: String,
-    token_secret: String,
-}
+#[tokio::main]
+async fn main() {
+    dotenvy::dotenv().ok();
 
-impl BasicAuth {
-    fn new(ti: String, ts: String) -> Self {
-        Self {
-            token_id: ti,
-            token_secret: ts,
-        }
-    }
+    let mux = MuxClient::new("K", "K");
 
-    fn header(&self) -> String {
-        let raw = format!("{}:{}", self.token_id, self.token_secret);
-        let encoded = base64::encode(raw);
-        format!("Basic {}", encoded)
-    }
-}
-
-struct HttpClient {
-    base_url: String,
-    client: Arc<Client>,
-    auth: BasicAuth,
-}
-
-impl HttpClient {
-    fn new(base_url: &str, auth: BasicAuth) -> Self {
-        let client = Client::new();
-        Self {
-            base_url: base_url.to_string(),
-            client: Arc::new(client),
-            auth,
-        }
-    }
-
-    fn req(&self, method: Method, path: &str) -> reqwest::blocking::RequestBuilder {
-        self.client
-            .request(method, format!("{}{}", self.base_url, path))
-            .header("Authorization", self.auth.header())
-    }
-}
-
-struct LiveStreamApi {
-    http: Arc<HttpClient>,
-}
-
-impl LiveStreamApi {
-    fn new(http: Arc<HttpClient>) -> Self {
-        Self { http }
-    }
-
-    fn create_live_stream(
-        &self,
-        body: CreateLiveStreamRequest,
-    ) -> Result<LiveStreamResponse, reqwest::Error> {
-        self.http
-            .req(Method::POST, "/video/v1/live-streams")
-            .json(&body)
-            .send()?
-            .json::<LiveStreamResponse>()
-    }
-
-    fn get_live_stream(&self, id: &str) -> Result<LiveStreamResponse, reqwest::Error> {
-        self.http
-            .req(Method::GET, &format!("/video/v1/live-streams/{}", id))
-            .send()?
-            .json::<LiveStreamResponse>()
-    }
-}
-
-struct MuxClient {
-    pub live_streams: LiveStreamApi,
-}
-
-impl MuxClient {
-    fn new(token_id: impl Into<String>, token_secret: impl Into<String>) -> Self {
-        let auth = BasicAuth::new(token_id.into(), token_secret.into());
-        let http = Arc::new(HttpClient::new("https://api.mux.com", auth));
-
-        Self {
-            live_streams: LiveStreamApi::new(http.clone()),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct CreateLiveStreamRequest {
-    playback_policy: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct LiveStreamResponse {
-    data: LiveStream,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct LiveStream {
-    id: String,
-    status: String,
-    playback_ids: Vec<PlaybackId>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PlaybackId {
-    id: String,
-    policy: String,
-}
-
-fn main() {
-    let mux = MuxClient::new("TOKEN_ID", "TOKEN_SECRET");
-
+    // create request
     let req = CreateLiveStreamRequest {
-        playback_policy: vec!["public".into()],
+        playback_policies: Some(vec!["public".into()]),
+        test: Some(true),
+        ..Default::default()
     };
 
-    match mux.live_streams.create_live_stream(req) {
-        Ok(res) => println!("created: {:?}", res.data),
-        Err(e) => eprintln!("error: {}", e),
+    // create stream
+    // let created = mux.live_streams.create_live_stream(req).await;
+    // if let Err(e) = created {
+    //     eprintln!("error creating stream: {}", e);
+    //     return;
+    // }
+    // let res = created.unwrap();
+
+    // println!("stream created:");
+    // println!("  id: {}", res.data.id);
+    // println!("  status: {}", res.data.status);
+    // println!("  key: {}", res.data.stream_key);
+    // println!("  created: {}", res.data.created_at);
+    // println!("  latency: {}", res.data.latency_mode);
+    // println!("  reconnect: {}", res.data.reconnect_window);
+    // println!("  max duration: {}", res.data.max_continuous_duration);
+
+    // if let Some(t) = res.data.test {
+    //     println!("  test: {}", t);
+    // }
+    // if let Some(p) = &res.data.srt_passphrase {
+    //     println!("  srt passphrase: {}", p);
+    // }
+
+    // if !res.data.playback_ids.is_empty() {
+    //     println!("  playback ids:");
+    //     for p in res.data.playback_ids {
+    //         println!("    - {} ({})", p.id, p.policy);
+    //     }
+    // }
+
+    // list
+    println!("\nlisting streams...");
+    let list = mux.live_streams.list_live_streams().await;
+    if let Err(e) = list {
+        eprintln!("error listing streams: {}", e);
+        return;
     }
+    let list = list.unwrap();
+
+    println!("found {} stream(s)", list.data.len());
+
+    // delete
+    // for s in list.data {
+    //     println!("deleting {} ({})", s.id, s.status);
+    //     match mux.live_streams.delete_live_stream(&s.id).await {
+    //         Ok(_) => println!("  deleted"),
+    //         Err(e) => eprintln!("  failed: {}", e),
+    //     }
+    // }
 }
