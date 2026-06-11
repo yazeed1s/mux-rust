@@ -1,65 +1,121 @@
 use crate::auth::BasicAuth;
-use reqwest::Method;
-use reqwest::{Client, Request, RequestBuilder};
-use std::sync::Arc;
+use crate::errors::Result;
+use reqwest::blocking::Client;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
-/// HttpClient is the workhorse that handles all HTTP communication with Mux's API.
-/// It wraps reqwest's Client and adds authentication, base URL handling, and request inspection.
-///
-/// We use Arc (Atomic Reference Counting) for the client so it can be safely shared
-/// across multiple threads and cloned cheaply without duplicating the underlying HTTP client.
 pub struct HttpClient {
     pub base_url: String,
-    pub client: Arc<Client>,
-    pub auth: BasicAuth,
+    client: Client,
+    auth: BasicAuth,
 }
 
 impl HttpClient {
     pub fn new(base_url: &str, auth: BasicAuth) -> Self {
-        let client = Client::new();
-
         Self {
             base_url: base_url.to_string(),
-            client: Arc::new(client),
+            client: Client::new(),
             auth,
         }
     }
 
-    pub fn req(&self, method: Method, path: &str) -> RequestBuilder {
-        self.client
-            .request(method, format!("{}{}", self.base_url, path))
+    fn url(&self, path: &str) -> String {
+        format!("{}{}", self.base_url, path)
+    }
+
+    pub fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        Ok(self
+            .client
+            .get(self.url(path))
             .header("Authorization", self.auth.header())
+            .send()?
+            .error_for_status()?
+            .json()?)
     }
 
-    pub fn build_and_inspect(&self, builder: RequestBuilder) -> Result<Request, reqwest::Error> {
-        let request = builder.build()?;
-
-        println!("Request method: {}", request.method());
-        println!("Request URL: {}", request.url());
-        println!("Request headers:");
-        for (name, value) in request.headers() {
-            println!("  {}: {:?}", name, value);
-        }
-
-        if let Some(body) = request.body() {
-            println!(
-                "Request body size: {:?} bytes",
-                body.as_bytes().map(|b| b.len())
-            );
-        }
-
-        Ok(request)
+    pub fn get_with_query<Q: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &Q,
+    ) -> Result<T> {
+        Ok(self
+            .client
+            .get(self.url(path))
+            .header("Authorization", self.auth.header())
+            .query(query)
+            .send()?
+            .error_for_status()?
+            .json()?)
     }
 
-    pub async fn execute(&self, request: Request) -> Result<reqwest::Response, reqwest::Error> {
-        let response = self.client.execute(request).await?;
+    pub fn post<B: Serialize, T: DeserializeOwned>(&self, path: &str, body: &B) -> Result<T> {
+        Ok(self
+            .client
+            .post(self.url(path))
+            .header("Authorization", self.auth.header())
+            .json(body)
+            .send()?
+            .error_for_status()?
+            .json()?)
+    }
 
-        println!("Response status: {}", response.status());
-        println!("Response headers:");
-        for (name, value) in response.headers() {
-            println!("  {}: {:?}", name, value);
-        }
+    pub fn post_empty<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        Ok(self
+            .client
+            .post(self.url(path))
+            .header("Authorization", self.auth.header())
+            .send()?
+            .error_for_status()?
+            .json()?)
+    }
 
-        Ok(response)
+    pub fn patch<B: Serialize, T: DeserializeOwned>(&self, path: &str, body: &B) -> Result<T> {
+        Ok(self
+            .client
+            .patch(self.url(path))
+            .header("Authorization", self.auth.header())
+            .json(body)
+            .send()?
+            .error_for_status()?
+            .json()?)
+    }
+
+    pub fn put<B: Serialize, T: DeserializeOwned>(&self, path: &str, body: &B) -> Result<T> {
+        Ok(self
+            .client
+            .put(self.url(path))
+            .header("Authorization", self.auth.header())
+            .json(body)
+            .send()?
+            .error_for_status()?
+            .json()?)
+    }
+
+    pub fn put_empty(&self, path: &str) -> Result<()> {
+        self.client
+            .put(self.url(path))
+            .header("Authorization", self.auth.header())
+            .send()?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    pub fn put_empty_response<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        Ok(self
+            .client
+            .put(self.url(path))
+            .header("Authorization", self.auth.header())
+            .send()?
+            .error_for_status()?
+            .json()?)
+    }
+
+    pub fn delete(&self, path: &str) -> Result<()> {
+        self.client
+            .delete(self.url(path))
+            .header("Authorization", self.auth.header())
+            .send()?
+            .error_for_status()?;
+        Ok(())
     }
 }

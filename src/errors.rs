@@ -3,7 +3,7 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     Http(reqwest::Error),
-    JsonParse(serde_json::Error),
+    Json(serde_json::Error),
     BuildError(String),
 }
 
@@ -11,7 +11,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Http(e) => write!(f, "HTTP error: {}", e),
-            Error::JsonParse(e) => write!(f, "JSON parse error: {}", e),
+            Error::Json(e) => write!(f, "JSON error: {}", e),
             Error::BuildError(msg) => write!(f, "Build error: {}", msg),
         }
     }
@@ -20,14 +20,14 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Error::Http(err)
+    fn from(e: reqwest::Error) -> Self {
+        Error::Http(e)
     }
 }
 
 impl From<serde_json::Error> for Error {
-    fn from(err: serde_json::Error) -> Self {
-        Error::JsonParse(err)
+    fn from(e: serde_json::Error) -> Self {
+        Error::Json(e)
     }
 }
 
